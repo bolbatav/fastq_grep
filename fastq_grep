@@ -1,0 +1,49 @@
+#!/usr/bin/env python3
+import argparse
+
+def reverse_complement(sequence):
+	complement={'A':'T', 'T':'A', 'G':'C', 'C':'G'}
+	sequence=list(sequence)
+	sequence.reverse()
+	for i in range(len(sequence)):
+		sequence[i]=complement[sequence[i]]
+	sequence=''.join(sequence)
+	return sequence
+
+parser=argparse.ArgumentParser(description='The script searches for a given motif in Fastq reads and writes matching ones into a file. Gaps (-) in the query sequence are ignored.')
+parser.add_argument('-q', '--query', type=str, metavar='', required=True, help='A motif to search.')
+parser.add_argument('-o', '--output', type=str, metavar='', required=False, help='Output file name.')
+parser.add_argument('-d', '--direction', type=int, metavar='', required=False, default=3, help='Read directionality. 1 - Forward, 2 - Reverse-complement, 3 - Both. Default = 3.')
+parser.add_argument('-m', '--maximum', type=int, metavar='', required=False, default=0, help='Maximum number of reads to search. Multiple files will not be searched through if the value is reached in the first one. Default = infinite.')
+parser.add_argument('-c', '--convert', default=False, action="store_true", dest="boolean_switch", required=False, help='Convert Fastq reads into Fasta sequences in the output file.')
+parser.add_argument('-e', '--existing', type=str, metavar='', required=False, default='w', help='Treatment of existing output files: (a)ppend, or over(w)rite. Default = w.')
+parser.add_argument('files', type=str, metavar='file', nargs='+', help='List of files to analyze.')
+arguments=parser.parse_args()
+forward=arguments.query.upper().replace('-', '')
+reverse=reverse_complement(forward)
+
+outf=open(arguments.output, arguments.existing)
+for f in arguments.files:
+	with open(f, 'r') as infile:
+		maxreads=False
+		if arguments.maximum:
+			maxreads=True
+		while (maxreads and arguments.maximum) or (not maxreads):
+			lines=[]
+			for _ in range(4):
+				lines+=[infile.readline()]
+			if '' in lines:
+				break
+			if (forward in lines[1] and (arguments.direction==1 or arguments.direction==3)) or (reverse in lines[1] and (arguments.direction==2 or arguments.direction==3)):
+				if maxreads:
+					arguments.maximum-=1
+				if not arguments.boolean_switch:
+					lines=''.join(lines)
+					outf.write(lines)
+				else:
+					lines[0]=lines[0].replace('@', '>')
+					lines[0]=lines[0].replace(':', '_')
+					lines=[lines[0], lines[1]]
+					lines=''.join(lines)
+					outf.write(lines)
+outf.close()
