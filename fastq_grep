@@ -1,0 +1,69 @@
+#!/usr/bin/env python3
+import argparse
+import fileinput
+
+def reverse_complement(sequence):
+	complement={'A':'T','T':'A','U':'A','G':'C','C':'G','R':'Y','Y':'R','S':'S','W':'W','K':'M','M':'K','B':'V','D':'H','H':'D','V':'B','N':'N'}
+	sequence=list(sequence)
+	sequence.reverse()
+	for i in range(len(sequence)):
+		sequence[i]=complement[sequence[i]]
+	sequence=''.join(sequence)
+	return sequence
+
+def check_base(motif, sequence):
+	return motif in sequence
+
+def check_iupac(motif, sequence):
+	for i in range(len(sequence)-1-len(motif)):
+		for j in range(len(motif)):
+			if sequence[i+j] not in iupac[motif[j]]:
+				break
+			if len(motif)-1==j:
+				return True
+	return False
+
+parser=argparse.ArgumentParser(description='The script searches for a given motif in Fastq reads and prints matching ones. Gaps (-) in the query sequence are ignored. IUPAC ambiguity codes (R,Y,S,W,K,M,B,D,H,V,N) are supported at a cost of greater processing time.')
+parser.add_argument('-q', '--query', type=str, metavar='', required=True, help='A motif to search.')
+parser.add_argument('-d', '--direction', type=int, metavar='', required=False, default=3, choices=[1,2,3], help='Read directionality. 1 - Forward, 2 - Reverse-complement, 3 - Both. Default = 3.')
+parser.add_argument('-m', '--maximum', type=int, metavar='', required=False, default=0, help='Maximum number of reads to search. Multiple files will not be searched through if the value is reached in the first one. Default = infinite.')
+parser.add_argument('-c', '--convert', action='store_true', required=False, help='Convert Fastq reads into Fasta sequences in the output file.')
+parser.add_argument('files', type=str, metavar='file', nargs='*', help='List of files to analyze.')
+arguments=parser.parse_args()
+forward=arguments.query.upper().replace('-', '')
+reverse=reverse_complement(forward)
+
+iupac={'A':['A'],'T':['T'],'U':['U'],'G':['G'],'C':['C'],'R':['A','G'],'Y':['C','T','U'],'S':['G','C'],'W':['A','T','U'],'K':['G','T','U'],'M':['A','C'],'B':['C','G','T','U'],'D':['A','G','T','U'],'H':['A','C','T','U'],'V':['A','G','C'],'N':['A','T','U','G','C']}
+
+search_function=check_base
+for b in ['R','Y','S','W','K','M','B','D','H','V','N']:
+	if b in forward:
+		search_function=check_iupac
+		break
+
+if arguments.maximum:
+	maxreads=True
+else:
+	maxreads=False
+
+lines=[]
+for f in fileinput.input(arguments.files):
+	if (maxreads and arguments.maximum==0):
+		break
+	if len(lines)<4:
+		lines+=[f]
+		continue
+	if ((arguments.direction==1 or arguments.direction==3) and search_function(forward, lines[1])) or ((arguments.direction==2 or arguments.direction==3) and search_function(reverse, lines[1])):
+		if maxreads:
+			arguments.maximum-=1
+		if not arguments.convert:
+			lines=''.join(lines)
+			print(lines, end='')
+		else:
+			lines[0]=lines[0].replace('@', '>')
+#			lines[0]=lines[0].replace(' ', '_') # Uncomment this line if whitespaces in read names hinder downstream applications
+#			lines[0]=lines[0].replace(':', '_') # Uncomment this line if colons in read names hinder downstream applications
+			lines=[lines[0], lines[1]]
+			lines=''.join(lines)
+			print(lines, end='')
+	lines=[]
